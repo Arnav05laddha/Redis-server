@@ -1,1 +1,5 @@
 build/
+benchmark.sh
+install_redis_tools.sh
+test_smoke.sh
+*.log
