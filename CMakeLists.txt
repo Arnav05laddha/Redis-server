@@ -10,10 +10,10 @@ endif()
 
 add_compile_options(-Wall -Wextra -Wno-unused-parameter -O2)
 
-# Files are in the project root (not src/)
-add_executable(server server.cpp)
+# Files are in the src/ directory
+add_executable(server src/server.cpp)
 
-target_include_directories(server PRIVATE .)
+target_include_directories(server PRIVATE src)
 
 find_package(Threads REQUIRED)
 target_link_libraries(server Threads::Threads)
