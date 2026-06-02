@@ -267,10 +267,18 @@ static void parse_args(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--port"           && i+1 < argc) { g_cfg.port = std::stoi(argv[++i]); }
-        else if (arg == "--replicaof" && i+2 < argc) {
-            g_repl.role        = Role::Replica;
-            g_repl.master_host = argv[++i];
-            g_repl.master_port = std::stoi(argv[++i]);
+        else if (arg == "--replicaof" && i+1 < argc) {
+            std::string next_arg = argv[++i];
+            size_t space = next_arg.find(' ');
+            if (space != std::string::npos) {
+                g_repl.role        = Role::Replica;
+                g_repl.master_host = next_arg.substr(0, space);
+                g_repl.master_port = std::stoi(next_arg.substr(space + 1));
+            } else if (i+1 < argc) {
+                g_repl.role        = Role::Replica;
+                g_repl.master_host = next_arg;
+                g_repl.master_port = std::stoi(argv[++i]);
+            }
         }
         else if (arg == "--dir"            && i+1 < argc) { g_cfg.dir             = argv[++i]; }
         else if (arg == "--dbfilename"     && i+1 < argc) { g_cfg.dbfilename      = argv[++i]; }
