@@ -5,8 +5,22 @@
 #include <cstdint>
 #include <iostream>
 
-// Minimal RDB v9 parser (enough for CodeCrafters stages)
-// Supports string keys with optional expiry
+/**
+ * rdb.hpp
+ * 
+ * Implements a minimal RDB (Redis Database) file parser for RDB version 9.
+ * The RDB file format is a binary format used by Redis for point-in-time snapshots.
+ * 
+ * This parser handles:
+ * - The "REDIS" magic string and version header.
+ * - Database selectors (0xFE) and DB resizing (0xFB).
+ * - Auxiliary fields (0xFA).
+ * - String keys and values, including their integer encodings (8-bit, 16-bit, 32-bit).
+ * - Expiry timestamps in milliseconds (0xFC) and seconds (0xFD).
+ * 
+ * Note: For the scope of the CodeCrafters challenge, this minimal parser 
+ * only needs to fully extract String types and gracefully ignore complex types.
+ */
 
 class RdbLoader {
 public:
@@ -99,6 +113,15 @@ private:
         return v;
     }
 
+    /**
+     * read_length
+     * 
+     * RDB length encoding uses the first 2 bits of the byte to determine the length format:
+     * 00: The next 6 bits represent the length.
+     * 01: Read one additional byte. The combined 14 bits represent the length.
+     * 10: Discard the remaining 6 bits. The next 4 bytes represent the length.
+     * 11: The next object is encoded in a special format (usually an integer).
+     */
     static uint64_t read_length(std::ifstream& f) {
         uint8_t b = read_byte(f);
         uint8_t enc = (b & 0xC0) >> 6;
@@ -120,6 +143,12 @@ private:
         return 0;
     }
 
+    /**
+     * read_string
+     * 
+     * Reads an RDB string, which can be either a standard length-prefixed byte array
+     * or an integer encoded as a string to save space.
+     */
     static std::string read_string(std::ifstream& f) {
         uint8_t b = read_byte(f);
         uint8_t enc = (b & 0xC0) >> 6;

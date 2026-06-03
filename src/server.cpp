@@ -90,6 +90,7 @@ static void handle_client(int fd, bool is_replica_client = false) {
 
             std::vector<std::string> args;
             if (pr.value.type == RespType::Array) {
+                // Standard RESP request: an array of bulk strings
                 for (auto& e : pr.value.array) {
                     if (e.type == RespType::BulkString && !e.is_null)
                         args.push_back(e.str);
@@ -97,8 +98,10 @@ static void handle_client(int fd, bool is_replica_client = false) {
                         args.push_back(e.str);
                 }
             } else if (pr.value.type == RespType::BulkString && !pr.value.is_null) {
+                // Fallback for inline commands formatted as a single bulk string
                 args = parse_inline(pr.value.str);
             } else if (pr.value.type == RespType::SimpleString) {
+                // Fallback for simple inline commands (like PING\r\n via telnet)
                 args = parse_inline(pr.value.str);
             }
 
@@ -139,10 +142,14 @@ static void handle_client(int fd, bool is_replica_client = false) {
                 continue;
             }
 
+            // Execute the command via the main CommandHandler.
+            // `propagate` is passed by reference and set to true if the command mutates state.
             bool propagate = false;
             RespValue resp = handler.handle(args, fd, propagate, cs);
 
             // ── PSYNC is handled manually in handle_psync ──────────────────
+            // PSYNC sends a continuous stream, so we don't serialize its `RespValue`.
+            // REPLCONF from replicas (like ACK) is also handled without a standard response here.
             bool skip_send = (cmd == "PSYNC") ||
                              (is_replica_client && cmd == "REPLCONF");
 

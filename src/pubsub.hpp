@@ -1,3 +1,12 @@
+/**
+ * pubsub.hpp
+ * 
+ * Manages the Redis Publish/Subscribe (Pub/Sub) messaging paradigm.
+ * 
+ * Clients can subscribe to one or more channels. When another client publishes
+ * a message to a channel, it is broadcasted (pushed) to all connected clients
+ * listening to that channel.
+ */
 #pragma once
 #include <string>
 #include <unordered_map>
@@ -7,9 +16,14 @@
 #include <sys/socket.h>
 
 // ─── Pub/Sub Registry ─────────────────────────────────────────────────────────
-// Thread-safe global channel registry.
-// Each subscriber fd is stored per channel.
-// PUBLISH pushes the message directly to subscriber sockets (fire-and-forget).
+/**
+ * PubSubRegistry
+ * 
+ * Thread-safe global channel registry.
+ * Maps channel names to sets of client FDs (socket file descriptors), and vice versa.
+ * PUBLISH commands serialize the message once and push it directly to all
+ * subscriber sockets (fire-and-forget).
+ */
 class PubSubRegistry {
 public:
     // Subscribe fd to channels. Returns subscription count for the fd.

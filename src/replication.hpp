@@ -1,3 +1,14 @@
+/**
+ * replication.hpp
+ * 
+ * Manages the Redis replication protocol (master-replica).
+ * 
+ * Features:
+ * - Tracking replica connections.
+ * - Propagating write commands from master to replicas.
+ * - Managing replication offsets (for WAIT command synchronization).
+ * - Empty RDB snapshot generation for initial full resync.
+ */
 #pragma once
 #include <string>
 #include <vector>
@@ -9,6 +20,11 @@
 
 enum class Role { Master, Replica };
 
+/**
+ * ReplicaConn
+ * Represents a connected replica node.
+ * Stores its socket FD and how many bytes of the replication stream it has acknowledged.
+ */
 struct ReplicaConn {
     int fd;
     std::atomic<long long> offset{0};
@@ -16,6 +32,12 @@ struct ReplicaConn {
     ReplicaConn() : fd(-1) {}
 };
 
+/**
+ * ReplConfig
+ * Global state managing whether this server is a Master or Replica,
+ * its randomly generated replication ID, current offset, and the list of
+ * attached replicas.
+ */
 struct ReplConfig {
     Role role = Role::Master;
     std::string master_host;
@@ -50,6 +72,11 @@ struct ReplConfig {
         return nullptr;
     }
 
+    /**
+     * propagate
+     * Sends a raw RESP-encoded command to all connected replicas that have
+     * finished the initial handshake. Thread-safe.
+     */
     void propagate(const std::string& raw) {
         std::lock_guard<std::mutex> lk(replicas_mu);
         for (auto& rc : replica_list) {
@@ -75,6 +102,11 @@ struct ReplConfig {
     }
 };
 
+/**
+ * empty_rdb_bytes
+ * Returns a hardcoded, valid Redis RDB file containing zero keys.
+ * This is sent during the PSYNC full-resynchronization phase.
+ */
 inline std::string empty_rdb_bytes() {
     static const uint8_t rdb[] = {
         0x52,0x45,0x44,0x49,0x53,0x30,0x30,0x31,0x31,

@@ -1,3 +1,13 @@
+/**
+ * aof.hpp
+ * 
+ * Implements the Append Only File (AOF) persistence mechanism.
+ * When enabled via `--appendonly yes`, every mutating command (SET, DEL, etc.)
+ * is written to an append-only log file in RESP format before returning to the client.
+ * 
+ * The AOFReplayer is used at startup to read this file and reconstruct the state
+ * of the database by sequentially executing the logged commands.
+ */
 #pragma once
 #include <string>
 #include <fstream>
@@ -8,8 +18,13 @@
 #include <iostream>
 
 // ─── AOF Writer ───────────────────────────────────────────────────────────────
-// Appends RESP-encoded write commands to the append-only file.
-// Thread-safe — all writes are guarded by a mutex.
+/**
+ * AOFWriter
+ * 
+ * Appends RESP-encoded write commands to the append-only file.
+ * Thread-safe — all writes are guarded by a mutex, ensuring concurrent clients
+ * write commands to the log atomically.
+ */
 class AOFWriter {
 public:
     AOFWriter() = default;
@@ -59,7 +74,13 @@ private:
 };
 
 // ─── AOF Replayer ─────────────────────────────────────────────────────────────
-// Reads an AOF file and invokes a callback for each command.
+/**
+ * AOFReplayer
+ * 
+ * Reads an AOF file into memory, parses the RESP arrays, and invokes a callback 
+ * for each command. The callback typically runs the command against a temporary 
+ * ClientState, thereby restoring the database state.
+ */
 class AOFReplayer {
 public:
     // callback receives the parsed args vector
