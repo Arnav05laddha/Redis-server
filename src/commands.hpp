@@ -1,3 +1,15 @@
+/**
+ * commands.hpp
+ * 
+ * Central command execution and routing logic.
+ * 
+ * This file contains the `CommandHandler` class, which takes parsed RESP arguments
+ * and routes them to the appropriate handler function (e.g., `handle_set`, `handle_get`).
+ * It also manages:
+ * - Client authentication state (AUTH)
+ * - Transaction queuing (MULTI / EXEC / DISCARD)
+ * - Subscribed mode locking (SUBSCRIBE / UNSUBSCRIBE)
+ */
 #pragma once
 #include "resp.hpp"
 #include "store.hpp"
@@ -37,6 +49,13 @@ struct ServerConfig {
 };
 
 // ─── Per-connection Transaction State ────────────────────────────────────────
+/**
+ * TxState
+ * 
+ * Holds the transaction state for a single client connection.
+ * When `in_multi` is true, commands are pushed to `queue` instead of being
+ * executed immediately. They are executed sequentially when EXEC is called.
+ */
 struct TxState {
     bool in_multi    = false;
     bool tx_error    = false; // syntax error inside MULTI
@@ -46,6 +65,15 @@ struct TxState {
 };
 
 // ─── Per-connection Client State ──────────────────────────────────────────────
+/**
+ * ClientState
+ * 
+ * Maintains the session state for a client connection, persisting across commands.
+ * - `tx`: The transaction queue.
+ * - `watched_keys`: Keys monitored for optimistic concurrency (WATCH).
+ * - `subscribed_mode`: If true, only Pub/Sub commands and PING are allowed.
+ * - `authenticated`: Must be true to run standard commands (if a password is required).
+ */
 struct ClientState {
     TxState  tx;
     std::unordered_set<std::string> watched_keys;
@@ -59,6 +87,12 @@ struct ClientState {
 };
 
 // ─── Command Handler ──────────────────────────────────────────────────────────
+/**
+ * CommandHandler
+ * 
+ * The main dispatch router. It inspects the first argument (the command name),
+ * checks client state (Auth, Subscribed, Multi), and delegates to specific private methods.
+ */
 class CommandHandler {
 public:
     Store&        store;
@@ -69,8 +103,15 @@ public:
     CommandHandler(Store& s, ReplConfig& r, ServerConfig& c, PubSubRegistry& ps)
         : store(s), repl(r), cfg(c), pubsub(ps) {}
 
-    // Main dispatch. Returns response value.
-    // should_propagate is set true for write commands.
+    /**
+     * handle
+     * Main dispatch function.
+     * @param args The tokenized command arguments.
+     * @param client_fd The client socket descriptor.
+     * @param should_propagate (Out) Set to true if the command mutated data (e.g. SET)
+     *                         so that server.cpp knows to write it to AOF/Replicas.
+     * @param cs The state of the client executing the command.
+     */
     RespValue handle(const std::vector<std::string>& args, int client_fd,
                      bool& should_propagate, ClientState& cs) {
         should_propagate = false;
