@@ -1,3 +1,14 @@
+/**
+ * server.cpp
+ * 
+ * Main entry point for the Redis clone server.
+ * This file handles:
+ *  1. TCP networking (binding, listening, accepting clients).
+ *  2. Thread-per-connection concurrency model.
+ *  3. Reading RESP byte streams from sockets and parsing them into commands.
+ *  4. Executing commands via the CommandHandler.
+ *  5. Managing the Replica handshake protocol (if started as a replica).
+ */
 #include "resp.hpp"
 #include "store.hpp"
 #include "replication.hpp"
@@ -49,6 +60,15 @@ static void send_sub_response(int fd, const std::string& kind,
 }
 
 
+/**
+ * handle_client
+ * 
+ * Executed in a dedicated thread for each connected client.
+ * 
+ * @param fd The socket file descriptor for the client.
+ * @param is_replica_client True if this connection is from our Master node 
+ *                          sending propagated commands to us.
+ */
 static void handle_client(int fd, bool is_replica_client = false) {
     CommandHandler handler(g_store, g_repl, g_cfg, g_pubsub);
     ClientState cs;
@@ -157,6 +177,16 @@ static void handle_client(int fd, bool is_replica_client = false) {
 }
 
 // ─── Replica handshake thread ─────────────────────────────────────────────────
+/**
+ * run_replica
+ * 
+ * If the server is configured as a replica (via --replicaof), this function
+ * runs in a background thread to:
+ * 1. Connect to the Master Redis node.
+ * 2. Send the PING / REPLCONF / PSYNC handshake sequence.
+ * 3. Receive the RDB snapshot stream.
+ * 4. Enter a continuous loop to receive and execute propagated write commands.
+ */
 static void run_replica() {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) { perror("socket"); return; }
@@ -263,6 +293,18 @@ static void run_replica() {
 }
 
 // ─── Parse CLI args ───────────────────────────────────────────────────────────
+/**
+ * parse_args
+ * 
+ * Parses command-line arguments to configure the server.
+ * Supports:
+ *  --port <port>
+ *  --replicaof <host> <port>  (or --replicaof "host port")
+ *  --dir <directory>          (for RDB/AOF files)
+ *  --dbfilename <filename>    (RDB file name)
+ *  --appendonly yes|no        (enable AOF)
+ *  --requirepass <password>   (authentication)
+ */
 static void parse_args(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];

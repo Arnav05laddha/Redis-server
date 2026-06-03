@@ -1,3 +1,15 @@
+/**
+ * store.hpp
+ * 
+ * Core key-value store implementation.
+ * 
+ * Features:
+ * - Thread-safe access via a global mutex.
+ * - Condition variables for blocking operations (BLPOP, XREAD BLOCK).
+ * - Multi-type support: Strings, Lists, Streams, Sorted Sets (ZSet), Geo.
+ * - Expiration and TTL tracking.
+ * - Watch registry for optimistic concurrency control (Transactions).
+ */
 #pragma once
 #include <string>
 #include <unordered_map>
@@ -113,7 +125,15 @@ struct StoreEntry {
 };
 
 // ─── Watch registry ───────────────────────────────────────────────────────────
-// Maps client-fd → set of watched keys that have been dirtied
+/**
+ * WatchRegistry
+ * 
+ * Implements optimistic concurrency for Redis transactions (WATCH/MULTI/EXEC).
+ * 
+ * - Maps client-fd → set of watched keys that have been dirtied.
+ * - When a key is modified, all clients watching that key are marked as "dirty".
+ * - If a client's transaction executes while it is dirty, the transaction fails.
+ */
 class WatchRegistry {
 public:
     // Register keys being watched by a client
@@ -156,6 +176,12 @@ private:
 };
 
 // ─── Store ────────────────────────────────────────────────────────────────────
+/**
+ * Store
+ * 
+ * The main thread-safe data structure holding all Redis keys and values.
+ * All operations on the store are protected by `std::mutex mu`.
+ */
 class Store {
 public:
     std::mutex mu;

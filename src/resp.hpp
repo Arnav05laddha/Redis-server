@@ -1,3 +1,16 @@
+/**
+ * resp.hpp
+ * 
+ * Implements the REdis Serialization Protocol (RESP) parser and serializer.
+ * Supports RESP2 data types:
+ * - Simple Strings (+)
+ * - Errors (-)
+ * - Integers (:)
+ * - Bulk Strings ($)
+ * - Arrays (*)
+ * 
+ * Also handles fallback parsing for inline commands (used by redis-benchmark).
+ */
 #pragma once
 #include <string>
 #include <vector>
