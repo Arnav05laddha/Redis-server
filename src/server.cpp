@@ -37,7 +37,15 @@ ServerConfig    g_cfg;
 AOFWriter       g_aof;
 PubSubRegistry  g_pubsub;
 
-// ─── Send raw bytes ───────────────────────────────────────────────────────────
+/**
+ * send_all
+ * 
+ * Helper function to ensure all bytes of a string are written to the socket.
+ * Handles partial sends by looping until the entire payload is transmitted.
+ * 
+ * @param fd The socket file descriptor.
+ * @param s The raw byte string to send.
+ */
 static void send_all(int fd, const std::string& s) {
     size_t total = 0;
     while (total < s.size()) {
@@ -47,8 +55,17 @@ static void send_all(int fd, const std::string& s) {
     }
 }
 
-// ─── Directly send SUBSCRIBE/UNSUBSCRIBE confirmations ───────────────────────
-// Redis sends one response array per channel on SUBSCRIBE/UNSUBSCRIBE
+/**
+ * send_sub_response
+ * 
+ * Formats and sends the specialized array response required by Redis when a client
+ * issues a SUBSCRIBE or UNSUBSCRIBE command.
+ * 
+ * @param fd The socket file descriptor.
+ * @param kind Either "subscribe" or "unsubscribe".
+ * @param channel The channel name.
+ * @param count The number of channels the client is currently subscribed to.
+ */
 static void send_sub_response(int fd, const std::string& kind,
                                const std::string& channel, int count) {
     auto msg = serialize(RespValue::arr({
@@ -338,7 +355,16 @@ static void parse_args(int argc, char** argv) {
     }
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+/**
+ * main
+ * 
+ * The main entry point. Orchestrates server initialization:
+ * 1. Parses command line configurations.
+ * 2. Loads RDB snapshot if present.
+ * 3. Initializes AOF and replays historical commands if enabled.
+ * 4. Spawns replica handshake background thread if running as a replica.
+ * 5. Binds TCP socket and enters accept() loop to spawn client threads.
+ */
 int main(int argc, char** argv) {
     signal(SIGPIPE, SIG_IGN);
     parse_args(argc, argv);

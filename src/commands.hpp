@@ -154,6 +154,7 @@ public:
         // ── Normal command dispatch ───────────────────────────────────────────
         if (cmd == "PING")      return handle_ping(args);
         if (cmd == "ECHO")      return handle_echo(args);
+        
 
         if (cmd == "SET")  { should_propagate = true; return handle_set(args, cs); }
         if (cmd == "GET")       return handle_get(args);
@@ -239,48 +240,71 @@ public:
 
 private:
     // ── PING ──────────────────────────────────────────────────────────────────
+    /** Handler for the Redis PING command. Returns PONG or the provided message. */
     RespValue handle_ping(const std::vector<std::string>& args) {
         if (args.size() > 1) return RespValue::bulk(args[1]);
         return RespValue::simple("PONG");
     }
 
     // ── ECHO ──────────────────────────────────────────────────────────────────
+    /** Handler for the Redis ECHO command. Returns the first argument exactly as provided. */
     RespValue handle_echo(const std::vector<std::string>& args) {
         if (args.size() < 2) return RespValue::error("ERR wrong number of arguments for 'echo'");
         return RespValue::bulk(args[1]);
     }
 
     // ── SET ───────────────────────────────────────────────────────────────────
-    RespValue handle_set(const std::vector<std::string>& args, ClientState& cs) {
-        if (args.size() < 3) return RespValue::error("ERR wrong number of arguments for 'set'");
-        const std::string& key = args[1];
-        const std::string& val = args[2];
+    RespValue handle_set(const std::vector<std::string> &args, ClientState &cs)
+    {
+        if (args.size() < 3)
+            return RespValue::error("ERR wrong number of arguments for 'set'");
+        const std::string &key = args[1];
+        const std::string &val = args[2];
 
         std::optional<long long> px_ttl;
         bool nx = false, xx = false;
 
-        for (size_t i = 3; i < args.size(); ++i) {
+        for (size_t i = 3; i < args.size(); ++i)
+        {
             std::string opt = to_upper(args[i]);
-            if ((opt == "EX") && i+1 < args.size()) {
+            if ((opt == "EX") && i + 1 < args.size())
+            {
                 px_ttl = std::stoll(args[++i]) * 1000;
-            } else if ((opt == "PX") && i+1 < args.size()) {
+            }
+            else if ((opt == "PX") && i + 1 < args.size())
+            {
                 px_ttl = std::stoll(args[++i]);
-            } else if ((opt == "EXAT") && i+1 < args.size()) {
+            }
+            else if ((opt == "EXAT") && i + 1 < args.size())
+            {
                 long long ts = std::stoll(args[++i]);
                 auto now_s = std::chrono::duration_cast<std::chrono::seconds>(
-                    std::chrono::system_clock::now().time_since_epoch()).count();
+                                 std::chrono::system_clock::now().time_since_epoch())
+                                 .count();
                 px_ttl = (ts - now_s) * 1000;
-            } else if ((opt == "PXAT") && i+1 < args.size()) {
+            }
+            else if ((opt == "PXAT") && i + 1 < args.size())
+            {
                 long long ts = std::stoll(args[++i]);
                 auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::system_clock::now().time_since_epoch()).count();
+                                  std::chrono::system_clock::now().time_since_epoch())
+                                  .count();
                 px_ttl = ts - now_ms;
-            } else if (opt == "NX") { nx = true; }
-              else if (opt == "XX") { xx = true; }
+            }
+            else if (opt == "NX")
+            {
+                nx = true;
+            }
+            else if (opt == "XX")
+            {
+                xx = true;
+            }
         }
 
-        if (nx && store.get(key).has_value()) return RespValue::null_bulk();
-        if (xx && !store.get(key).has_value()) return RespValue::null_bulk();
+        if (nx && store.get(key).has_value())
+            return RespValue::null_bulk();
+        if (xx && !store.get(key).has_value())
+            return RespValue::null_bulk();
 
         store.set(key, val, px_ttl);
         // Dirty watched key
@@ -290,6 +314,7 @@ private:
     }
 
     // ── GET ───────────────────────────────────────────────────────────────────
+    /** Handler for the Redis GET command. Returns the value of a string key. */
     RespValue handle_get(const std::vector<std::string>& args) {
         if (args.size() < 2) return RespValue::error("ERR wrong number of arguments for 'get'");
         auto val = store.get(args[1]);
@@ -297,6 +322,7 @@ private:
     }
 
     // ── DEL ───────────────────────────────────────────────────────────────────
+    /** Handler for the Redis DEL command. Removes the specified keys and returns the count. */
     RespValue handle_del(const std::vector<std::string>& args, ClientState&) {
         if (args.size() < 2) return RespValue::error("ERR wrong number of arguments for 'del'");
         int count = 0;
@@ -306,6 +332,7 @@ private:
     }
 
     // ── EXISTS ────────────────────────────────────────────────────────────────
+    /** Handler for the Redis EXISTS command. Returns the number of keys that exist. */
     RespValue handle_exists(const std::vector<std::string>& args) {
         if (args.size() < 2) return RespValue::error("ERR wrong number of arguments");
         int count = 0;
@@ -315,14 +342,17 @@ private:
     }
 
     // ── INCR / DECR ───────────────────────────────────────────────────────────
+    /** Handler for the Redis INCR command. Increments integer value by 1. */
     RespValue handle_incr(const std::vector<std::string>& args, ClientState&) {
         if (args.size() < 2) return RespValue::error("ERR wrong number of arguments");
         return do_incr(args[1], 1);
     }
+    /** Handler for the Redis DECR command. Decrements integer value by 1. */
     RespValue handle_decr(const std::vector<std::string>& args, ClientState&) {
         if (args.size() < 2) return RespValue::error("ERR wrong number of arguments");
         return do_incr(args[1], -1);
     }
+    /** Shared helper for INCR/DECR operations. */
     RespValue do_incr(const std::string& key, long long delta) {
         auto val = store.get(key);
         long long n = 0;
@@ -336,6 +366,7 @@ private:
     }
 
     // ── MSET / MGET ──────────────────────────────────────────────────────────
+    /** Handler for the Redis MSET command. Sets multiple keys to multiple values. */
     RespValue handle_mset(const std::vector<std::string>& args, ClientState&) {
         if (args.size() < 3 || (args.size() % 2) == 0)
             return RespValue::error("ERR wrong number of arguments for 'mset'");
@@ -343,6 +374,7 @@ private:
             store.set(args[i], args[i+1]);
         return RespValue::simple("OK");
     }
+    /** Handler for the Redis MGET command. Gets values of all specified keys. */
     RespValue handle_mget(const std::vector<std::string>& args) {
         std::vector<RespValue> rv;
         for (size_t i = 1; i < args.size(); ++i) {
@@ -353,6 +385,7 @@ private:
     }
 
     // ── APPEND ────────────────────────────────────────────────────────────────
+    /** Handler for the Redis APPEND command. Appends a string to the value of a key. */
     RespValue handle_append(const std::vector<std::string>& args, ClientState&) {
         if (args.size() < 3) return RespValue::error("ERR wrong number of arguments");
         auto cur = store.get(args[1]).value_or("");
@@ -362,6 +395,7 @@ private:
     }
 
     // ── GETSET ────────────────────────────────────────────────────────────────
+    /** Handler for the Redis GETSET command. Sets the key and returns its old value. */
     RespValue handle_getset(const std::vector<std::string>& args, ClientState&) {
         if (args.size() < 3) return RespValue::error("ERR wrong number of arguments");
         auto old = store.get(args[1]);
@@ -370,6 +404,7 @@ private:
     }
 
     // ── KEYS ──────────────────────────────────────────────────────────────────
+    /** Handler for the Redis KEYS command. Returns all keys matching a pattern. */
     RespValue handle_keys(const std::vector<std::string>& args) {
         std::string pat = (args.size() > 1) ? args[1] : "*";
         auto ks = store.keys(pat);
@@ -379,22 +414,26 @@ private:
     }
 
     // ── TYPE ──────────────────────────────────────────────────────────────────
+    /** Handler for the Redis TYPE command. Returns the string representation of the type. */
     RespValue handle_type(const std::vector<std::string>& args) {
         if (args.size() < 2) return RespValue::error("ERR wrong number of arguments");
         return RespValue::simple(store.type_of(args[1]));
     }
 
     // ── TTL / PTTL ────────────────────────────────────────────────────────────
+    /** Handler for the Redis TTL command. Returns the remaining time to live in seconds. */
     RespValue handle_ttl(const std::vector<std::string>& args) {
         if (args.size() < 2) return RespValue::error("ERR wrong number of arguments");
         return RespValue::make_int(store.ttl(args[1]));
     }
+    /** Handler for the Redis PTTL command. Returns the remaining time to live in ms. */
     RespValue handle_pttl(const std::vector<std::string>& args) {
         if (args.size() < 2) return RespValue::error("ERR wrong number of arguments");
         return RespValue::make_int(store.pttl(args[1]));
     }
 
     // ── EXPIRE / PEXPIRE ──────────────────────────────────────────────────────
+    /** Shared handler for EXPIRE and PEXPIRE commands to set a key's time to live. */
     RespValue handle_expire(const std::vector<std::string>& args, bool ms, ClientState&) {
         if (args.size() < 3) return RespValue::error("ERR wrong number of arguments");
         auto cur = store.get(args[1]);
@@ -406,6 +445,7 @@ private:
     }
 
     // ── LIST commands ─────────────────────────────────────────────────────────
+    /** Handler for the Redis RPUSH command. Appends elements to the tail of a list. */
     RespValue handle_rpush(const std::vector<std::string>& args, ClientState&) {
         if (args.size() < 3) return RespValue::error("ERR wrong number of arguments for 'rpush'");
         std::vector<std::string> vals(args.begin()+2, args.end());
@@ -413,6 +453,7 @@ private:
         if (len < 0) return RespValue::error("WRONGTYPE Operation against a key holding the wrong kind of value");
         return RespValue::make_int(len);
     }
+    /** Handler for the Redis LPUSH command. Prepends elements to the head of a list. */
     RespValue handle_lpush(const std::vector<std::string>& args, ClientState&) {
         if (args.size() < 3) return RespValue::error("ERR wrong number of arguments for 'lpush'");
         // LPUSH pushes in reverse order (last arg ends up at head)
@@ -421,18 +462,21 @@ private:
         if (len < 0) return RespValue::error("WRONGTYPE Operation against a key holding the wrong kind of value");
         return RespValue::make_int(len);
     }
+    /** Handler for the Redis RPUSHX command. Appends elements only if list exists. */
     RespValue handle_rpushx(const std::vector<std::string>& args, ClientState&) {
         if (args.size() < 3) return RespValue::error("ERR wrong number of arguments");
         if (store.llen(args[1]) == 0) return RespValue::make_int(0);
         std::vector<std::string> vals(args.begin()+2, args.end());
         return RespValue::make_int(store.list_push(args[1], vals, 1));
     }
+    /** Handler for the Redis LPUSHX command. Prepends elements only if list exists. */
     RespValue handle_lpushx(const std::vector<std::string>& args, ClientState&) {
         if (args.size() < 3) return RespValue::error("ERR wrong number of arguments");
         if (store.llen(args[1]) == 0) return RespValue::make_int(0);
         std::vector<std::string> vals(args.begin()+2, args.end());
         return RespValue::make_int(store.list_push(args[1], vals, -1));
     }
+    /** Handler for the Redis LRANGE command. Returns elements within index range. */
     RespValue handle_lrange(const std::vector<std::string>& args) {
         if (args.size() < 4) return RespValue::error("ERR wrong number of arguments for 'lrange'");
         long long start = std::stoll(args[2]);
@@ -442,10 +486,12 @@ private:
         for (auto& e : elems) rv.push_back(RespValue::bulk(e));
         return RespValue::arr(rv);
     }
+    /** Handler for the Redis LLEN command. Returns the length of a list. */
     RespValue handle_llen(const std::vector<std::string>& args) {
         if (args.size() < 2) return RespValue::error("ERR wrong number of arguments");
         return RespValue::make_int(store.llen(args[1]));
     }
+    /** Handler for the Redis LPOP command. Removes and returns the first element(s) of a list. */
     RespValue handle_lpop(const std::vector<std::string>& args, ClientState&) {
         if (args.size() < 2) return RespValue::error("ERR wrong number of arguments for 'lpop'");
         long long count = (args.size() >= 3) ? std::stoll(args[2]) : 1;
@@ -457,6 +503,7 @@ private:
         for (auto& v : vals) rv.push_back(RespValue::bulk(v));
         return RespValue::arr(rv);
     }
+    /** Handler for the Redis RPOP command. Removes and returns the last element(s) of a list. */
     RespValue handle_rpop(const std::vector<std::string>& args, ClientState&) {
         if (args.size() < 2) return RespValue::error("ERR wrong number of arguments for 'rpop'");
         long long count = (args.size() >= 3) ? std::stoll(args[2]) : 1;
@@ -468,7 +515,7 @@ private:
         for (auto& v : vals) rv.push_back(RespValue::bulk(v));
         return RespValue::arr(rv);
     }
-    // BLPOP: blocks up to timeout seconds (0 = forever)
+    /** Handler for the Redis BLPOP/BRPOP command. Blocks until elements are available. */
     RespValue handle_blpop(const std::vector<std::string>& args, int /*fd*/) {
         if (args.size() < 3) return RespValue::error("ERR wrong number of arguments for 'blpop'");
         std::vector<std::string> keys(args.begin()+1, args.end()-1);
@@ -485,12 +532,14 @@ private:
     }
 
     // ── MULTI / EXEC / DISCARD ────────────────────────────────────────────────
+    /** Handler for the Redis MULTI command. Starts a transaction block. */
     RespValue handle_multi(ClientState& cs) {
         if (cs.tx.in_multi) return RespValue::error("ERR MULTI calls can not be nested");
         cs.tx.in_multi = true;
         return RespValue::simple("OK");
     }
 
+    /** Handler for the Redis EXEC command. Executes all previously queued commands in a transaction. */
     RespValue handle_exec(const std::vector<std::string>&, int client_fd,
                           bool& should_propagate, ClientState& cs) {
         if (!cs.tx.in_multi) return RespValue::error("ERR EXEC without MULTI");
@@ -522,6 +571,7 @@ private:
         return RespValue::arr(results);
     }
 
+    /** Handler for the Redis DISCARD command. Flushes all previously queued commands. */
     RespValue handle_discard(ClientState& cs) {
         if (!cs.tx.in_multi) return RespValue::error("ERR DISCARD without MULTI");
         store.watch_reg.unwatch(-1); // clear watches (we'll use client_fd in server.cpp)
@@ -530,6 +580,7 @@ private:
     }
 
     // ── WATCH / UNWATCH ───────────────────────────────────────────────────────
+    /** Handler for the Redis WATCH command. Marks the given keys to be watched for conditional execution of a transaction. */
     RespValue handle_watch(const std::vector<std::string>& args, int fd,
                            ClientState& cs) {
         if (args.size() < 2) return RespValue::error("ERR wrong number of arguments for 'watch'");
@@ -539,6 +590,7 @@ private:
         store.watch_reg.watch(fd, keys);
         return RespValue::simple("OK");
     }
+    /** Handler for the Redis UNWATCH command. Flushes all the previously watched keys for a transaction. */
     RespValue handle_unwatch(int fd, ClientState& cs) {
         store.watch_reg.unwatch(fd);
         cs.watched_keys.clear();
@@ -546,6 +598,7 @@ private:
     }
 
     // ── SORTED SETS ───────────────────────────────────────────────────────────
+    /** Handler for the Redis ZADD command. Adds one or more members to a sorted set, or update its score if it already exists. */
     RespValue handle_zadd(const std::vector<std::string>& args, ClientState&) {
         if (args.size() < 4 || (args.size() % 2) != 0)
             return RespValue::error("ERR wrong number of arguments for 'zadd'");
@@ -560,11 +613,13 @@ private:
         }
         return RespValue::make_int(store.zadd(args[1], members));
     }
+    /** Handler for the Redis ZRANK command. Determine the index of a member in a sorted set. */
     RespValue handle_zrank(const std::vector<std::string>& args) {
         if (args.size() < 3) return RespValue::error("ERR wrong number of arguments");
         auto r = store.zrank(args[1], args[2]);
         return r ? RespValue::make_int(*r) : RespValue::null_bulk();
     }
+    /** Handler for the Redis ZRANGE command. Return a range of members in a sorted set, by index. */
     RespValue handle_zrange(const std::vector<std::string>& args) {
         if (args.size() < 4) return RespValue::error("ERR wrong number of arguments for 'zrange'");
         long long start = std::stoll(args[2]);
@@ -596,10 +651,12 @@ private:
         }
         return RespValue::arr(rv);
     }
+    /** Handler for the Redis ZCARD command. Get the number of members in a sorted set. */
     RespValue handle_zcard(const std::vector<std::string>& args) {
         if (args.size() < 2) return RespValue::error("ERR wrong number of arguments");
         return RespValue::make_int(store.zcard(args[1]));
     }
+    /** Handler for the Redis ZSCORE command. Get the score associated with the given member in a sorted set. */
     RespValue handle_zscore(const std::vector<std::string>& args) {
         if (args.size() < 3) return RespValue::error("ERR wrong number of arguments");
         auto sc = store.zscore(args[1], args[2]);
@@ -608,6 +665,7 @@ private:
         oss << *sc;
         return RespValue::bulk(oss.str());
     }
+    /** Handler for the Redis ZREM command. Remove one or more members from a sorted set. */
     RespValue handle_zrem(const std::vector<std::string>& args, ClientState&) {
         if (args.size() < 3) return RespValue::error("ERR wrong number of arguments");
         std::vector<std::string> members(args.begin()+2, args.end());
@@ -615,6 +673,7 @@ private:
     }
 
     // ── GEO commands ─────────────────────────────────────────────────────────
+    /** Handler for the Redis GEOADD command. Add one or more geospatial items in the geospatial index. */
     RespValue handle_geoadd(const std::vector<std::string>& args, ClientState&) {
         // GEOADD key [lon lat member ...]
         if (args.size() < 5 || ((args.size() - 2) % 3) != 0)
@@ -634,6 +693,7 @@ private:
         return RespValue::make_int(added);
     }
 
+    /** Handler for the Redis GEOPOS command. Return longitude and latitude of members of a geospatial index. */
     RespValue handle_geopos(const std::vector<std::string>& args) {
         if (args.size() < 3) return RespValue::error("ERR wrong number of arguments for 'geopos'");
         std::vector<RespValue> rv;
@@ -654,6 +714,7 @@ private:
         return RespValue::arr(rv);
     }
 
+    /** Handler for the Redis GEODIST command. Return the distance between two members in the geospatial index. */
     RespValue handle_geodist(const std::vector<std::string>& args) {
         if (args.size() < 4) return RespValue::error("ERR wrong number of arguments for 'geodist'");
         std::string unit = (args.size() >= 5) ? to_upper(args[4]) : "M";
@@ -668,6 +729,7 @@ private:
         return RespValue::bulk(oss.str());
     }
 
+    /** Handler for the Redis GEOSEARCH command. Query a geospatial index for members inside a given area. */
     RespValue handle_geosearch(const std::vector<std::string>& args) {
         // GEOSEARCH key FROMMEMBER member BYRADIUS radius m|km|mi|ft ASC
         if (args.size() < 7) return RespValue::error("ERR syntax error");
@@ -693,6 +755,7 @@ private:
     }
 
     // ── XADD ─────────────────────────────────────────────────────────────────
+    /** Handler for the Redis XADD command. Appends a new entry to a stream. */
     RespValue handle_xadd(const std::vector<std::string>& args, ClientState&) {
         if (args.size() < 5)
             return RespValue::error("ERR wrong number of arguments for 'xadd'");
@@ -709,6 +772,7 @@ private:
     }
 
     // ── XRANGE ───────────────────────────────────────────────────────────────
+    /** Handler for the Redis XRANGE command. Return a range of elements in a stream, with IDs matching a given interval. */
     RespValue handle_xrange(const std::vector<std::string>& args) {
         if (args.size() < 4) return RespValue::error("ERR wrong number of arguments for 'xrange'");
         std::string start = args[2] == "-" ? "-" : args[2];
@@ -720,12 +784,14 @@ private:
     }
 
     // ── XLEN ─────────────────────────────────────────────────────────────────
+    /** Handler for the Redis XLEN command. Return the number of entries in a stream. */
     RespValue handle_xlen(const std::vector<std::string>& args) {
         if (args.size() < 2) return RespValue::error("ERR wrong number of arguments");
         return RespValue::make_int(store.xlen(args[1]));
     }
 
     // ── XREAD [BLOCK ms] STREAMS key [key ...] id [id ...] ───────────────────
+    /** Handler for the Redis XREAD command. Return data from one or multiple streams, only returning entries with an ID greater than the last received ID. */
     RespValue handle_xread(const std::vector<std::string>& args) {
         size_t idx = 1;
         long long count = -1;
@@ -811,6 +877,7 @@ private:
     }
 
     // ── PUB/SUB ───────────────────────────────────────────────────────────────
+    /** Handler for the Redis SUBSCRIBE command. Subscribes the client to one or more channels. */
     RespValue handle_subscribe(const std::vector<std::string>& args, int fd,
                                ClientState& cs) {
         if (args.size() < 2) return RespValue::error("ERR wrong number of arguments for 'subscribe'");
@@ -829,6 +896,7 @@ private:
         return RespValue::null_bulk(); // server.cpp handles sending
     }
 
+    /** Handler for the Redis UNSUBSCRIBE command. Unsubscribes the client from given channels, or from all of them if none is given. */
     RespValue handle_unsubscribe(const std::vector<std::string>& args, int fd,
                                  ClientState& cs) {
         std::vector<std::string> channels(args.begin()+1, args.end());
@@ -837,6 +905,7 @@ private:
         return RespValue::null_bulk(); // server.cpp handles sending
     }
 
+    /** Handler for the Redis PUBLISH command. Posts a message to the given channel. */
     RespValue handle_publish(const std::vector<std::string>& args) {
         if (args.size() < 3) return RespValue::error("ERR wrong number of arguments for 'publish'");
         // Build the message array: ["message", channel, msg]
@@ -850,6 +919,7 @@ private:
     }
 
     // ── CONFIG ────────────────────────────────────────────────────────────────
+    /** Handler for the Redis CONFIG command. Retrieves or alters server configuration parameters. */
     RespValue handle_config(const std::vector<std::string>& args) {
         if (args.size() < 2) return RespValue::error("ERR wrong number of arguments");
         std::string sub = to_upper(args[1]);
@@ -882,6 +952,7 @@ private:
     }
 
     // ── INFO ──────────────────────────────────────────────────────────────────
+    /** Handler for the Redis INFO command. Returns information and statistics about the server. */
     RespValue handle_info(const std::vector<std::string>& args) {
         std::string section = (args.size() > 1) ? to_upper(args[1]) : "ALL";
         std::ostringstream ss;
@@ -901,6 +972,7 @@ private:
     }
 
     // ── REPLCONF ──────────────────────────────────────────────────────────────
+    /** Handler for the internal REPLCONF command used during Master-Replica handshake. */
     RespValue handle_replconf(const std::vector<std::string>& args, int /*fd*/) {
         if (args.size() >= 3 && to_upper(args[1]) == "GETACK") {
             return RespValue::arr({
@@ -913,6 +985,7 @@ private:
     }
 
     // ── PSYNC ─────────────────────────────────────────────────────────────────
+    /** Handler for the internal PSYNC command used by replicas to initiate a replication stream. */
     RespValue handle_psync(const std::vector<std::string>&, int client_fd) {
         std::string resp = "+FULLRESYNC " + repl.repl_id + " 0\r\n";
         ::send(client_fd, resp.data(), resp.size(), MSG_NOSIGNAL);
@@ -935,6 +1008,7 @@ private:
     }
 
     // ── WAIT ──────────────────────────────────────────────────────────────────
+    /** Handler for the Redis WAIT command. Blocks until the previous write commands are successfully replicated to at least the specified number of replicas. */
     RespValue handle_wait(const std::vector<std::string>& args) {
         if (args.size() < 3) return RespValue::error("ERR wrong number of arguments for 'wait'");
         int num_replicas = std::stoi(args[1]);
@@ -955,6 +1029,7 @@ private:
     }
 
     // ── AUTH ──────────────────────────────────────────────────────────────────
+    /** Handler for the Redis AUTH command. Authenticates the client connection. */
     RespValue handle_auth(const std::vector<std::string>& args, ClientState& cs) {
         if (args.size() < 2) return RespValue::error("ERR wrong number of arguments for 'auth'");
         std::string password = args.back(); // AUTH [username] password
@@ -970,6 +1045,7 @@ private:
     }
 
     // ── ACL ───────────────────────────────────────────────────────────────────
+    /** Handler for the Redis ACL command. Inspects and manages users and access control rules. */
     RespValue handle_acl(const std::vector<std::string>& args) {
         if (args.size() < 2) return RespValue::error("ERR wrong number of arguments for 'acl'");
         std::string sub = to_upper(args[1]);
@@ -1003,6 +1079,7 @@ private:
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+    /** Helper function to serialize an array of StreamEntry structs into RESP format. */
     static RespValue stream_entries_to_resp(const std::vector<StreamEntry>& entries) {
         std::vector<RespValue> result;
         for (auto& e : entries) {

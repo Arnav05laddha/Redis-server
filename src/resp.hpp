@@ -26,26 +26,38 @@ struct RespValue {
     std::vector<RespValue> array;
     bool is_null = false;
 
+    /** Creates a Simple String RESP value (e.g. +OK\r\n) */
     static RespValue simple(const std::string& s) {
         RespValue v; v.type = RespType::SimpleString; v.str = s; return v;
     }
+    /** Creates an Error RESP value (e.g. -ERR\r\n) */
     static RespValue error(const std::string& s) {
         RespValue v; v.type = RespType::Error; v.str = s; return v;
     }
+    /** Creates an Integer RESP value (e.g. :1000\r\n) */
     static RespValue make_int(long long n) {
         RespValue v; v.type = RespType::Integer; v.num = n; return v;
     }
+    /** Creates a Bulk String RESP value (e.g. $5\r\nhello\r\n) */
     static RespValue bulk(const std::string& s) {
         RespValue v; v.type = RespType::BulkString; v.str = s; return v;
     }
+    /** Creates a Null Bulk String RESP value (e.g. $-1\r\n) */
     static RespValue null_bulk() {
         RespValue v; v.type = RespType::BulkString; v.is_null = true; return v;
     }
+    /** Creates an Array RESP value containing nested RespValue elements */
     static RespValue arr(const std::vector<RespValue>& a) {
         RespValue v; v.type = RespType::Array; v.array = a; return v;
     }
 };
 
+/**
+ * serialize
+ * 
+ * Converts a memory-resident `RespValue` tree back into a raw RESP2-encoded
+ * byte string, ready to be transmitted over a TCP socket.
+ */
 inline std::string serialize(const RespValue& v) {
     std::ostringstream out;
     switch (v.type) {
@@ -71,6 +83,17 @@ struct ParseResult {
     bool ok = false;
 };
 
+/**
+ * parse
+ * 
+ * Core RESP parser function. Recursively parses a raw byte buffer starting at `pos`
+ * and extracts exactly one complete RESP value.
+ * 
+ * @param buf The raw byte buffer received from the socket.
+ * @param pos The offset at which to start parsing.
+ * @return ParseResult containing the extracted value, the number of bytes consumed,
+ *         and a boolean indicating if a complete value was successfully parsed.
+ */
 inline ParseResult parse(const std::string& buf, size_t pos = 0) {
     if (pos >= buf.size()) return {};
 
@@ -129,6 +152,12 @@ inline ParseResult parse(const std::string& buf, size_t pos = 0) {
     return res;
 }
 
+/**
+ * parse_inline
+ * 
+ * Tokenizes a space-separated inline command (like 'PING' or 'SET key val')
+ * into an array of argument strings. Used as a fallback for non-RESP requests.
+ */
 inline std::vector<std::string> parse_inline(const std::string& line) {
     std::vector<std::string> tokens;
     std::istringstream ss(line);

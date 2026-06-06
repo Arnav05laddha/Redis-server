@@ -24,6 +24,11 @@
 
 class RdbLoader {
 public:
+    /**
+     * load
+     * Opens an RDB file, validates the "REDIS" magic string, and parses the 
+     * binary snapshot to reconstruct the key-value store state in memory.
+     */
     static bool load(Store& store, const std::string& path) {
         std::ifstream f(path, std::ios::binary);
         if (!f) return false;
@@ -96,16 +101,19 @@ public:
     }
 
 private:
+    /** Reads a single unsigned byte from the binary stream. */
     static uint8_t read_byte(std::ifstream& f) {
         uint8_t b; f.read((char*)&b, 1); return b;
     }
 
+    /** Reads a 32-bit unsigned integer (little-endian encoded) from the stream. */
     static uint32_t read_uint32_le(std::ifstream& f) {
         uint8_t buf[4]; f.read((char*)buf, 4);
         return (uint32_t)buf[0] | ((uint32_t)buf[1]<<8) |
                ((uint32_t)buf[2]<<16) | ((uint32_t)buf[3]<<24);
     }
 
+    /** Reads a 64-bit unsigned integer (little-endian encoded) from the stream. */
     static uint64_t read_uint64_le(std::ifstream& f) {
         uint8_t buf[8]; f.read((char*)buf, 8);
         uint64_t v = 0;

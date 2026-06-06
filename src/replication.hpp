@@ -57,8 +57,13 @@ struct ReplConfig {
         for (auto& c : repl_id) c = hex[dist(rng)];
     }
 
+    /** Returns true if this instance is running as the Master node. */
     bool is_master() const { return role == Role::Master; }
 
+    /**
+     * add_replica
+     * Registers a new replica connection descriptor for a given socket FD.
+     */
     void add_replica(int fd) {
         std::lock_guard<std::mutex> lk(replicas_mu);
         auto rc = std::make_shared<ReplicaConn>();
@@ -66,6 +71,7 @@ struct ReplConfig {
         replica_list.push_back(rc);
     }
 
+    /** Returns the replica connection struct for a given FD, or nullptr if not found. */
     std::shared_ptr<ReplicaConn> find_replica(int fd) {
         for (auto& rc : replica_list)
             if (rc->fd == fd) return rc;
@@ -88,6 +94,11 @@ struct ReplConfig {
         repl_offset += (long long)raw.size();
     }
 
+    /**
+     * ack_count
+     * Returns the number of replicas that have acknowledged processing the 
+     * replication stream up to (or beyond) the given offset.
+     */
     int ack_count(long long offset) {
         std::lock_guard<std::mutex> lk(replicas_mu);
         int cnt = 0;
@@ -96,6 +107,7 @@ struct ReplConfig {
         return cnt;
     }
 
+    /** Returns the total number of connected replicas. */
     size_t replica_count() {
         std::lock_guard<std::mutex> lk(replicas_mu);
         return replica_list.size();

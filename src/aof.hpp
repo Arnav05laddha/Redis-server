@@ -29,7 +29,12 @@ class AOFWriter {
 public:
     AOFWriter() = default;
 
-    // Open (or create) the AOF file.
+    /**
+     * open
+     * Opens (or creates) the AOF file at the given directory and filename.
+     * Also writes a simple manifest file alongside it if one doesn't exist.
+     * Returns true if successfully opened.
+     */
     bool open(const std::string& dir, const std::string& filename) {
         std::lock_guard<std::mutex> lk(mu_);
         try {
@@ -52,9 +57,13 @@ public:
         return enabled_;
     }
 
+    /** Returns true if the AOF file is successfully opened and enabled for writing. */
     bool is_enabled() const { return enabled_; }
 
-    // Write a RESP-serialized command to the AOF
+    /**
+     * append
+     * Thread-safely appends a RESP-serialized command string to the AOF.
+     */
     void append(const std::string& resp_cmd) {
         if (!enabled_) return;
         std::lock_guard<std::mutex> lk(mu_);
@@ -64,6 +73,7 @@ public:
         }
     }
 
+    /** Returns the absolute or relative path to the active AOF file. */
     std::string path() const { return path_; }
 
 private:
@@ -83,7 +93,11 @@ private:
  */
 class AOFReplayer {
 public:
-    // callback receives the parsed args vector
+    /**
+     * replay
+     * Opens an AOF file, parses the binary RESP stream, and invokes the callback
+     * for each extracted command (represented as a vector of strings).
+     */
     static bool replay(const std::string& path,
                        std::function<void(const std::vector<std::string>&)> cb) {
         std::ifstream f(path, std::ios::binary);

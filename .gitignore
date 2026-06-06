@@ -1,5 +1,30 @@
+# Ignore everything by default
+*
+
+# Allow directories to be traversed
+!*/
+
+# Explicitly ignore unwanted directories so they aren't even traversed
+.codecrafters/
+.vscode/
 build/
-benchmark.sh
-install_redis_tools.sh
-test_smoke.sh
+out/
+bin/
+
+# Unignore the files we explicitly want to track
+!.gitignore
+!README.md
+!CMakeLists.txt
+
+# Unignore all files in the src directory
+!src/**
+
+# Ignore build artifacts that might accidentally end up in src/ or root
+*.o
+*.obj
+*.exe
+*.out
 *.log
+*.so
+*.dll
+test_resp
